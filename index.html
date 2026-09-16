@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@1.46.0/dist/umd/lucide.min.js"></script>
 <style>
   :root{
     --navy:#1e3a8a; --navy-700:#1d3578; --navy-50:#eef2ff;
@@ -243,15 +243,78 @@
     .placed.conflict,.placed.noteacher{border-width:1.2px}
     table.tt,.placed,.slot,.print-header img,table.tt thead th,table.tt tbody th{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   }
+
+  /* ---------- Ecran de connexion ---------- */
+  body.locked .shell, body.locked .toast, body.locked .modal-backdrop{display:none!important}
+  .auth{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:24px;
+        background:linear-gradient(160deg,#1b2a56 0%,#24356b 55%,#16224a 100%)}
+  .auth-card{width:100%;max-width:340px;background:#fff;border-radius:18px;padding:30px 26px 26px;
+             box-shadow:0 24px 60px rgba(0,0,0,.35);text-align:center}
+  .auth-logo{width:56px;height:56px;margin:0 auto 14px;border-radius:15px;background:#1b2a56;color:#fff;
+             display:grid;place-items:center;font-family:'Poppins',sans-serif;font-weight:700;font-size:17px}
+  .auth-card h2{font-family:'Poppins',sans-serif;font-size:19px;font-weight:600;color:#1b2a56}
+  .auth-card > p{font-size:12.5px;color:#6b7280;margin:4px 0 20px}
+  .auth-card input,
+  .auth-card input[type=text],
+  .auth-card input[type=password]{width:100%;padding:12px 14px;margin-bottom:10px;border:1.5px solid #d9dee8;
+             border-radius:11px;font:500 14.5px 'Inter',sans-serif;color:#17233f;background:#fbfcfe;-webkit-text-fill-color:#17233f}
+  .auth-card input::placeholder{color:#9aa3b5;-webkit-text-fill-color:#9aa3b5}
+  .auth-card input:focus{outline:none;border-color:#1b2a56;background:#fff;box-shadow:0 0 0 3px rgba(27,42,86,.12)}
+  .auth-card button{width:100%;padding:12px;margin-top:6px;border:0;border-radius:11px;background:#1b2a56;color:#fff;
+                    font-family:'Poppins',sans-serif;font-size:14.5px;font-weight:600;cursor:pointer}
+  .auth-card button:hover{background:#24356b}
+  .auth-card button:disabled{opacity:.6;cursor:default}
+  .auth-err{display:none;margin-top:12px;font-size:12.5px;color:#c0392b}
+  @keyframes shk{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+  .shake{animation:shk .3s}
+  /* ---------- Indicateur de synchronisation ---------- */
+  .sync{display:flex;align-items:center;gap:7px;margin:14px 6px 6px;padding:8px 10px;border-radius:9px;
+        font-size:11.5px;line-height:1.2;background:rgba(255,255,255,.08);color:#c9d3ee}
+  .sync .ic{width:14px;height:14px;flex:0 0 auto}
+  .sync.ok{color:#8fe3b8}
+  .sync.bad{color:#ffc4a8}
+  .sync.wait{color:#ffe3a8}
+  .save-now{display:flex;align-items:center;justify-content:center;gap:7px;margin:0 6px 4px;padding:9px 10px;
+            border:1px solid rgba(255,255,255,.18);border-radius:9px;background:transparent;color:#dbe2f5;
+            font:500 12px 'Inter',sans-serif;cursor:pointer;width:calc(100% - 12px)}
+  .save-now:hover{background:rgba(255,255,255,.1)}
+  /* ---------- Bandeau de conflit ---------- */
+  .conflict{display:none;align-items:center;gap:12px;flex-wrap:wrap;position:fixed;left:50%;top:14px;
+            transform:translateX(-50%);z-index:9000;max-width:min(680px,94vw);padding:12px 16px;border-radius:12px;
+            background:#fff4e5;border:1.5px solid #f0b37e;box-shadow:0 12px 32px rgba(0,0,0,.16)}
+  .conflict p{flex:1 1 260px;font-size:13px;color:#7a4b16;line-height:1.45;margin:0}
+  .conflict button{border:0;border-radius:9px;padding:9px 13px;font:600 12.5px 'Inter',sans-serif;cursor:pointer}
+  .conflict .c-srv{background:#1b2a56;color:#fff}
+  .conflict .c-mine{background:#fff;color:#7a4b16;border:1.5px solid #e0a96d}
+  @media print{.auth,.sync,.save-now,.conflict{display:none!important}}
 </style>
 </head>
-<body>
+<body class="locked">
+<div class="auth" id="authGate">
+  <form class="auth-card" id="authForm" autocomplete="off">
+    <div class="auth-logo">AGC</div>
+    <h2>Planning AGC</h2>
+    <p>Acad&eacute;mie Georges Claude &mdash; El Jadida</p>
+    <input id="authUser" type="text" placeholder="Identifiant" autocomplete="username">
+    <input id="authPass" type="password" placeholder="Mot de passe" autocomplete="current-password">
+    <button type="submit" id="authBtn">Se connecter</button>
+    <div class="auth-err" id="authErr">Identifiant ou mot de passe incorrect.</div>
+  </form>
+</div>
+
+<div class="conflict" id="conflictBar">
+  <p><strong>Le planning a &eacute;t&eacute; modifi&eacute; sur un autre poste.</strong>
+     Vos derni&egrave;res modifications ne sont pas encore enregistr&eacute;es. Que faut-il garder ?</p>
+  <button class="c-srv"  id="conflictServer">Recharger la version du serveur</button>
+  <button class="c-mine" id="conflictMine">Garder mes modifications</button>
+</div>
+
 <div class="shell">
 
   <aside class="side no-print">
     <div class="logo-row">
       <img class="logo-img" id="sideLogo"
-           src="https://cdn.prod.website-files.com/682f40cedbb46cd6e15b45cb/6a064910d98c04735a2b0a6c_aipreview%20logo.png"
+           src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Crect%20width%3D%27100%27%20height%3D%27100%27%20rx%3D%2716%27%20fill%3D%27%23ffffff%27/%3E%3Ctext%20x%3D%2750%27%20y%3D%2754%27%20font-family%3D%27Poppins%2CInter%2CArial%2Csans-serif%27%20font-size%3D%2727%27%20font-weight%3D%27700%27%20fill%3D%27%231b2a56%27%20text-anchor%3D%27middle%27%20dominant-baseline%3D%27middle%27%3EAGC%3C/text%3E%3C/svg%3E"
            alt="AGC" onerror="this.style.display='none';document.getElementById('sideLogoFb').style.display='grid'">
       <div class="logo-fallback" id="sideLogoFb">AGC</div>
       <div>
@@ -259,6 +322,8 @@
         <p>Emplois du temps</p>
       </div>
     </div>
+    <div class="sync" id="syncStatus"></div>
+    <button class="save-now" id="saveNowBtn" type="button"><i data-lucide="save" class="ic"></i> Enregistrer maintenant</button>
     <button class="nav-item active" data-view="setup"><i data-lucide="sliders-horizontal" class="ic"></i> Configuration</button>
     <button class="nav-item" data-view="planning"><i data-lucide="calendar-days" class="ic"></i> Emploi du temps</button>
     <div class="side-foot">
@@ -353,7 +418,7 @@
       </div>
 
       <div class="print-header">
-        <img src="https://cdn.prod.website-files.com/682f40cedbb46cd6e15b45cb/6a064910d98c04735a2b0a6c_aipreview%20logo.png" alt="AGC">
+        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Crect%20width%3D%27100%27%20height%3D%27100%27%20rx%3D%2716%27%20fill%3D%27%23ffffff%27/%3E%3Ctext%20x%3D%2750%27%20y%3D%2754%27%20font-family%3D%27Poppins%2CInter%2CArial%2Csans-serif%27%20font-size%3D%2727%27%20font-weight%3D%27700%27%20fill%3D%27%231b2a56%27%20text-anchor%3D%27middle%27%20dominant-baseline%3D%27middle%27%3EAGC%3C/text%3E%3C/svg%3E" alt="AGC">
         <div class="ph-txt">
           <h1>Académie Georges Claude</h1>
           <p id="printSubtitle">Emploi du temps</p>

@@ -1,0 +1,9 @@
+{
+  "name": "planning-agc",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Planning AGC - emplois du temps de l'Academie Georges Claude",
+  "dependencies": {
+    "@vercel/blob": "^2.6.1"
+  }
+}

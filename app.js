@@ -55,11 +55,184 @@ let state = {
 };
 
 function uid(p){ return (p||'x')+Math.random().toString(36).slice(2,9); }
-function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
-function load(){
-  try{ const r=localStorage.getItem(STORAGE_KEY); if(r) state=JSON.parse(r); }catch(e){}
+
+/* =================================================================
+   STOCKAGE SERVEUR
+   Les donnees vivent sur le serveur (Vercel Blob) et sont partagees
+   par tous les postes qui se connectent avec le meme compte.
+   Une copie locale sert de secours si le reseau tombe.
+   ================================================================= */
+const API = '/api/planning';
+
+let AUTH    = '';     // identifiants encodes, envoyes a chaque appel
+let SERVER  = false;  // true si le serveur repond
+let REV     = 0;      // revision serveur connue de ce poste
+let STAMP   = '';     // empreinte du fichier distant (veille)
+let DIRTY   = false;  // des modifications locales ne sont pas encore enregistrees
+let WRITING = false;  // une ecriture est en cours
+let AGAIN   = false;  // une autre ecriture attend
+let SAVE_TIMER = null;
+
+function authHeaders(extra){
+  const h = { 'x-agc-auth': AUTH };
+  if(extra) Object.assign(h, extra);
+  return h;
+}
+
+/* ---------- Indicateur de synchronisation ---------- */
+function setSyncStatus(kind){
+  const el = document.getElementById('syncStatus');
+  if(!el) return;
+  const map = {
+    saving  : ['refresh-cw',   'Enregistrement...',     'wait'],
+    ok      : ['cloud-check',  'Enregistre sur le serveur', 'ok'],
+    error   : ['cloud-off',    'Serveur injoignable',   'bad'],
+    local   : ['hard-drive',   'Mode local (non partage)', 'bad'],
+    conflict: ['alert-circle', 'Conflit a regler',      'bad']
+  };
+  const [icon, label, cls] = map[kind] || map.ok;
+  el.className = 'sync ' + cls;
+  el.innerHTML = '<i data-lucide="'+icon+'" class="ic"></i><span>'+label+'</span>';
+  refreshIcons();
+}
+
+function normalizeState(){
   state.subjects ||= []; state.teachers ||= []; state.classes ||= []; state.plan ||= {};
   if(!state.currentClass && state.classes[0]) state.currentClass = state.classes[0].id;
+}
+
+function renderAll(){
+  renderSubjects(); renderTeachers(); renderClasses(); renderPlanSelect();
+  try{ renderPlan(); }catch(e){}
+}
+
+/* ---------- Lecture ---------- */
+async function serverRead(){
+  const r = await fetch(API, { headers: authHeaders(), cache: 'no-store' });
+  if(!r.ok) throw new Error('http ' + r.status);
+  return r.json();   // { ok, data, rev, stamp }
+}
+
+/* ---------- Ecriture (une seule a la fois) ---------- */
+async function serverWrite(silent){
+  if(!SERVER){ setSyncStatus('local'); return; }
+  if(WRITING){ AGAIN = true; return; }
+  WRITING = true;
+  try{
+    const r = await fetch(API, {
+      method : 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body   : JSON.stringify({ state: state, baseRev: REV })
+    });
+    if(r.status === 409){
+      const j = await r.json();
+      showConflict(j);
+      return;
+    }
+    if(!r.ok) throw new Error('http ' + r.status);
+    const j = await r.json();
+    REV = j.rev || REV; STAMP = j.stamp || STAMP;
+    DIRTY = false;
+    setSyncStatus('ok');
+    if(!silent) toast('Enregistre sur le serveur');
+  }catch(e){
+    setSyncStatus('error');
+  }finally{
+    WRITING = false;
+    if(AGAIN){ AGAIN = false; serverWrite(true); }
+  }
+}
+
+/* ---------- Sauvegarde appelee par l'application ---------- */
+function save(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  if(!SERVER){ setSyncStatus('local'); return; }
+  DIRTY = true;
+  setSyncStatus('saving');
+  clearTimeout(SAVE_TIMER);
+  SAVE_TIMER = setTimeout(()=>serverWrite(true), 900);
+}
+
+/* ---------- Conflit : deux postes ont modifie en meme temps ---------- */
+let CONFLICT = null;
+function showConflict(j){
+  CONFLICT = j;
+  setSyncStatus('conflict');
+  const bar = document.getElementById('conflictBar');
+  if(bar) bar.style.display = 'flex';
+}
+function resolveConflict(choice){
+  const bar = document.getElementById('conflictBar');
+  if(bar) bar.style.display = 'none';
+  if(!CONFLICT) return;
+  if(choice === 'server'){
+    if(CONFLICT.data){ state = CONFLICT.data; normalizeState(); }
+    REV = CONFLICT.rev || REV; STAMP = CONFLICT.stamp || STAMP;
+    DIRTY = false;
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+    renderAll();
+    setSyncStatus('ok');
+    toast('Version du serveur rechargee');
+  }else{
+    REV = CONFLICT.rev || REV;   // on repart de la revision du serveur
+    CONFLICT = null;
+    serverWrite();
+    return;
+  }
+  CONFLICT = null;
+}
+
+/* ---------- Veille : detecte les modifications des autres postes ---------- */
+async function watchServer(){
+  if(!SERVER || document.hidden || CONFLICT) return;
+  try{
+    const r = await fetch(API + '?probe=1', { headers: authHeaders(), cache: 'no-store' });
+    if(!r.ok) return;
+    const p = await r.json();
+    if(!p.stamp || p.stamp === STAMP) return;     // rien de neuf
+    const j = await serverRead();
+    if(!j.data) return;
+    if(DIRTY){ showConflict(j); return; }          // on a des modifs locales
+    state = j.data; normalizeState();
+    REV = j.rev || 0; STAMP = j.stamp || '';
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+    renderAll();
+    toast('Planning mis a jour depuis un autre poste');
+  }catch(e){}
+}
+
+/* ---------- Chargement initial ---------- */
+async function load(){
+  let data = null;
+
+  if(SERVER){
+    try{
+      const j = await serverRead();
+      data  = j.data || null;
+      REV   = j.rev || 0;
+      STAMP = j.stamp || '';
+      setSyncStatus('ok');
+    }catch(e){
+      SERVER = false;
+      setSyncStatus('error');
+    }
+  }else{
+    setSyncStatus('local');
+  }
+
+  if(!data){
+    try{ const r = localStorage.getItem(STORAGE_KEY); if(r) data = JSON.parse(r); }catch(e){}
+    // Le serveur est vide mais ce poste a des donnees : on les televerse.
+    if(data && SERVER) setTimeout(()=>serverWrite(true), 500);
+  }
+
+  if(data) state = data;
+  normalizeState();
+
+  if(SERVER){
+    setInterval(watchServer, 45000);
+    document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) watchServer(); });
+  }
 }
 
 const byId = (arr,id)=>arr.find(x=>x.id===id);
@@ -1255,18 +1428,37 @@ function bind(){
   });
   document.getElementById('genOneBtn').addEventListener('click',()=>{
     if(!state.currentClass){ toast('Aucune classe sélectionnée'); return; }
-    const r=generateClass(state.currentClass); renderPlan();
-    toast(r.failed.length?`Généré — ${r.failed.length} matière(s) à vérifier`:'Emploi du temps généré');
+    const go=()=>{
+      const r=generateClass(state.currentClass); renderPlan();
+      toast(r.failed.length?`Généré — ${r.failed.length} matière(s) à vérifier`:'Emploi du temps généré');
+    };
+    if(planHasCourses(state.currentClass)){
+      const c=byId(state.classes,state.currentClass);
+      askConfirm({title:'Régénérer cette classe ?',text:`L'emploi du temps actuel de « ${c?c.name:''} » sera remplacé, y compris vos ajustements manuels.`,okLabel:'Régénérer'},go);
+    } else go();
   });
   document.getElementById('genAllBtn').addEventListener('click',()=>{
     if(!state.classes.length){ toast('Aucune classe'); return; }
-    state.plan={};
-    state.classes.forEach(c=>generateClass(c.id));
-    repairConflicts(8);
-    renderPlan();
-    const a=analyzePlan();
-    toast(a.conflictList.length? `Généré — ${a.conflictList.length} conflit(s) à ajuster` : 'Toutes les classes générées sans conflit');
+    const go=()=>{
+      state.plan={};
+      state.classes.forEach(c=>generateClass(c.id));
+      repairConflicts(8);
+      renderPlan();
+      const a=analyzePlan();
+      toast(a.conflictList.length? `Généré — ${a.conflictList.length} conflit(s) à ajuster` : 'Toutes les classes générées sans conflit');
+    };
+    const dejaRempli = state.classes.some(c=>planHasCourses(c.id));
+    if(dejaRempli){
+      askConfirm({title:'Régénérer toutes les classes ?',text:'Tous les emplois du temps existants seront remplacés, y compris les ajustements faits à la main.',okLabel:'Tout régénérer'},go);
+    } else go();
   });
+  const saveNow=document.getElementById('saveNowBtn');
+  if(saveNow) saveNow.addEventListener('click',()=>{
+    if(!SERVER){ toast('Mode local — aucun serveur disponible'); return; }
+    clearTimeout(SAVE_TIMER); serverWrite(false);
+  });
+  const cs=document.getElementById('conflictServer'); if(cs) cs.addEventListener('click',()=>resolveConflict('server'));
+  const cm=document.getElementById('conflictMine');   if(cm) cm.addEventListener('click',()=>resolveConflict('mine'));
   document.getElementById('clearPlanBtn').addEventListener('click',()=>{
     if(!state.currentClass)return;
     askConfirm({title:'Vider l\'emploi du temps ?',text:'Toutes les séances de cette classe seront retirées.',okLabel:'Vider'},()=>{
@@ -1447,12 +1639,100 @@ function updateItem(key,field,val){
   if(field==='hours') renderClasses(); // maj total
 }
 
-/* ---------- INIT ---------- */
-load();
-// Premier lancement (aucune donnée) -> pré-remplir avec les classes/matières AGC
-if(!state.subjects.length && !state.classes.length && !state.teachers.length){
-  seedAGC();
+/* Une classe a-t-elle deja des seances placees ? */
+function planHasCourses(classId){
+  const g = state.plan && state.plan[classId];
+  if(!g) return false;
+  return DAYS.some(d => (g[d]||[]).some(cell => cell));
 }
-renderSubjects(); renderTeachers(); renderClasses(); renderPlanSelect();
-bind();
-refreshIcons();
+
+/* ---------- INIT ---------- */
+async function boot(){
+  await load();
+  // Premier lancement (aucune donnee) -> pre-remplir avec les classes/matieres AGC
+  if(!state.subjects.length && !state.classes.length && !state.teachers.length){
+    seedAGC();
+    save();
+  }
+  renderAll();
+  bind();
+  refreshIcons();
+  window.addEventListener('beforeunload', function(e){
+    if(DIRTY){ e.preventDefault(); e.returnValue = ''; }
+  });
+}
+
+/* ---------- CONNEXION ---------- */
+/* Identifiants de secours si le site tourne sans serveur (fichier ouvert
+   directement). En ligne, ce sont les variables AGC_USER / AGC_PASSWORD
+   definies sur Vercel qui font foi. */
+const ACCES_IDENTIFIANT = 'agc';
+const ACCES_MOTDEPASSE  = 'agc2026';
+
+(function(){
+  const gate = document.getElementById('authGate');
+  const form = document.getElementById('authForm');
+  const err  = document.getElementById('authErr');
+  const btn  = document.getElementById('authBtn');
+  let started = false;
+
+  function enter(){
+    if(started) return; started = true;
+    document.body.classList.remove('locked');
+    gate.style.display = 'none';
+    boot();
+  }
+
+  function encode(u, p){
+    try{ return btoa(unescape(encodeURIComponent(u + '::' + p))); }
+    catch(e){ return ''; }
+  }
+
+  // Verifie aupres du serveur ; retombe en mode local s'il n'y a pas d'API.
+  async function tryLogin(u, p){
+    const token = encode(u, p);
+    try{
+      const r = await fetch(API + '?check=1', { headers: { 'x-agc-auth': token }, cache: 'no-store' });
+      if(r.status === 401) return 'bad';
+      if(r.ok){ AUTH = token; SERVER = true; return 'ok'; }
+      throw new Error('http ' + r.status);
+    }catch(e){
+      // Pas de serveur : mode local avec les identifiants de secours.
+      if(u === ACCES_IDENTIFIANT && p === ACCES_MOTDEPASSE){ SERVER = false; return 'local'; }
+      return 'bad';
+    }
+  }
+
+  // Reconnexion automatique dans la meme session du navigateur.
+  (async function(){
+    let saved = null;
+    try{ saved = sessionStorage.getItem('agc_auth'); }catch(e){}
+    if(!saved) return;
+    try{
+      const r = await fetch(API + '?check=1', { headers: { 'x-agc-auth': saved }, cache: 'no-store' });
+      if(r.ok){ AUTH = saved; SERVER = true; enter(); return; }
+    }catch(e){
+      SERVER = false; enter(); return;      // hors ligne : on laisse entrer en local
+    }
+    try{ sessionStorage.removeItem('agc_auth'); }catch(e){}
+  })();
+
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    err.style.display = 'none';
+    const u = document.getElementById('authUser').value.trim();
+    const p = document.getElementById('authPass').value;
+    btn.disabled = true; btn.textContent = 'Verification...';
+    const res = await tryLogin(u, p);
+    btn.disabled = false; btn.textContent = 'Se connecter';
+    if(res === 'ok' || res === 'local'){
+      if(res === 'ok'){ try{ sessionStorage.setItem('agc_auth', AUTH); }catch(e){} }
+      enter();
+    }else{
+      err.style.display = 'block';
+      form.classList.remove('shake'); void form.offsetWidth; form.classList.add('shake');
+    }
+  });
+
+  document.getElementById('authUser').focus();
+})();

@@ -1,0 +1,156 @@
+/* Écran de connexion — thème clair verrouillé : le mode sombre du
+   navigateur ne peut pas rendre le texte illisible. */
+:root { color-scheme: light; }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #17233f;
+  background: #16224a;
+  -webkit-font-smoothing: antialiased;
+}
+
+.lg-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(160deg, #1b2a56 0%, #24356b 55%, #16224a 100%);
+}
+
+.lg-card {
+  width: 100%;
+  max-width: 380px;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 34px 30px 28px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+}
+
+.lg-logo {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+  background: #1b2a56;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font: 700 18px 'Poppins', 'Inter', sans-serif;
+  letter-spacing: 0.5px;
+}
+
+.lg-card h1 {
+  text-align: center;
+  font: 600 21px 'Poppins', 'Inter', sans-serif;
+  color: #1b2a56;
+}
+
+.lg-sub {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  margin: 5px 0 24px;
+}
+
+.lg-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #3b4763;
+  margin: 0 0 6px 2px;
+}
+
+.lg-input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1.5px solid #d9dee8;
+  border-radius: 11px;
+  font: 500 15px 'Inter', system-ui, sans-serif;
+  color: #17233f;
+  -webkit-text-fill-color: #17233f;
+  background: #fbfcfe;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.lg-input:focus {
+  outline: none;
+  border-color: #1b2a56;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(27, 42, 86, 0.12);
+}
+
+/* Remplissage automatique du navigateur : garder un texte lisible */
+.lg-input:-webkit-autofill {
+  -webkit-text-fill-color: #17233f;
+  -webkit-box-shadow: 0 0 0 40px #fbfcfe inset;
+}
+
+.lg-pass { position: relative; }
+.lg-pass .lg-input { padding-right: 88px; }
+
+.lg-eye {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #eef1f7;
+  color: #1b2a56;
+  font: 600 12px 'Inter', sans-serif;
+  cursor: pointer;
+}
+.lg-eye:hover { background: #e2e7f2; }
+
+.lg-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 13px;
+  border: 0;
+  border-radius: 11px;
+  background: #1b2a56;
+  color: #ffffff;
+  font: 600 15px 'Poppins', 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.lg-btn:hover:not(:disabled) { background: #24356b; }
+.lg-btn:disabled { opacity: 0.55; cursor: default; }
+
+.lg-err {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #fdecea;
+  color: #b3261e;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.lg-setup {
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: #fff4e5;
+  border: 1.5px solid #f0b37e;
+  color: #7a4b16;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.lg-setup strong { display: block; margin-bottom: 4px; }
+.lg-setup ul { padding-left: 18px; }
+
+@keyframes lg-shk {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+.lg-shake { animation: lg-shk 0.32s; }

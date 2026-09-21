@@ -5,10 +5,10 @@ Emplois du temps de l'Académie Georges Claude, El Jadida.
 Application **Next.js 16** avec une base de données **PostgreSQL**.
 Toutes les données sont enregistrées en ligne, rien n'est gardé dans le navigateur.
 Un seul accès administrateur : **`adminagc`**.
-
+ 
 ---
 
-## Nouveautés de la version 4
+## Nouveautés de la version 4 
 
 **Export Excel.** Deux boutons dans l'emploi du temps. **Excel** exporte ce qui est
 affiché (une classe, un enseignant ou une matière). **Excel — tout** produit un classeur

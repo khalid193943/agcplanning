@@ -67,7 +67,7 @@ export default function LoginForm() {
   return (
     <main className="lg-wrap">
       <form key={shake} className={`lg-card${shake ? ' lg-shake' : ''}`} onSubmit={onSubmit} noValidate>
-        <div className="lg-logo" aria-hidden="true">AGC</div>
+        <img className="lg-crest" src="/brand/logo.webp" alt="Académie Georges Claude" width={124} height={124} />
         <h1>Planning AGC</h1>
         <p className="lg-sub">Académie Georges Claude — El Jadida</p>
 

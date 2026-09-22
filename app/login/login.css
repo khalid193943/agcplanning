@@ -154,3 +154,6 @@ body {
   75% { transform: translateX(8px); }
 }
 .lg-shake { animation: lg-shk 0.32s; }
+
+/* Logo officiel de l'école */
+.lg-crest { display: block; width: 124px; height: 124px; margin: -8px auto 8px; object-fit: contain; }

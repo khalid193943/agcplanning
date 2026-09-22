@@ -1011,8 +1011,8 @@ function renderClassPlan(){
   DAYS.forEach(day=>{
     h+=`<tr><th>${day}</th>`;
     PERIODS.forEach((p,pi)=>{
-      if(p.type!=='course'){ h+=`<td class="slot pause"></td>`; return; }
-      if(!isOpen(day,pi)){ h+=`<td class="slot closed"></td>`; return; }
+      if(p.type!=='course'){ if(day===DAYS[0]) h+=pauseCellHTML(p); return; }
+      if(!isOpen(day,pi)){ const cs=closedSpan(day,pi); if(cs) h+=`<td class="slot closed" colspan="${cs}"><span class="closed-lbl"><i data-lucide="moon" class="ic-sm"></i>Pas de cours</span></td>`; return; }
       const cell=grid[day]?.[pi];
       if(cell){
         const s=byId(state.subjects,cell.subjectId);
@@ -1091,8 +1091,8 @@ function renderEntityPlan(){
   DAYS.forEach(day=>{
     h+=`<tr><th>${day}</th>`;
     PERIODS.forEach((p,pi)=>{
-      if(p.type!=='course'){ h+=`<td class="slot pause"></td>`; return; }
-      if(!isOpen(day,pi)){ h+=`<td class="slot closed"></td>`; return; }
+      if(p.type!=='course'){ if(day===DAYS[0]) h+=pauseCellHTML(p); return; }
+      if(!isOpen(day,pi)){ const cs=closedSpan(day,pi); if(cs) h+=`<td class="slot closed" colspan="${cs}"><span class="closed-lbl"><i data-lucide="moon" class="ic-sm"></i>Pas de cours</span></td>`; return; }
       const list=map[day+'|'+pi]||[];
       if(!list.length){ h+=`<td class="slot"></td>`; return; }
       totalHours+=list.length;
@@ -1133,7 +1133,7 @@ function planHeadRow(){
   let h='<thead><tr><th>Jour</th>';
   PERIODS.forEach(p=>{
     if(p.type==='course'){ h+=`<th>${p.label}</th>`; }
-    else { h+=`<th>${p.label}<span class="sub">${p.type==='lunch'?'Déjeuner':'Pause'}</span></th>`; }
+    else { h+=`<th class="th-pause th-${p.type}">${p.label.replace(' – ','<br>')}</th>`; }
   });
   return h+'</tr></thead><tbody>';
 }
@@ -1872,10 +1872,28 @@ function decoratePlanTitle(){
 const __renderPlanBase = renderPlan;
 renderPlan = function(){ __renderPlanBase(); decoratePlanTitle(); };
 
+
+/* ---------- Grille : pauses et créneaux fermés ---------- */
+function pauseCellHTML(p){
+  const lunch = p.type==='lunch';
+  return `<td class="slot pause pause-${lunch?'lunch':'break'}" rowspan="${DAYS.length}"><div class="pause-inner">`+
+    `<i data-lucide="${lunch?'utensils':'coffee'}" class="ic"></i>`+
+    `<span class="pause-lbl">${lunch?'Déjeuner':'Pause'}</span>`+
+    `<span class="pause-dur">${fmtDuration(periodMinutes(p.label))}</span></div></td>`;
+}
+/* Nombre de créneaux fermés consécutifs à partir de pi (0 s'il est déjà couvert) */
+function closedSpan(day, pi){
+  const closedAt = i => !!PERIODS[i] && PERIODS[i].type==='course' && !isOpen(day, i);
+  if(closedAt(pi-1)) return 0;
+  let n = 1; while(closedAt(pi+n)) n++;
+  return n;
+}
+
 /* =================================================================
    EXPORT EXCEL (.xlsx)
-   Une feuille par emploi du temps, couleurs des matières, A4 paysage
-   prêt à imprimer. La bibliothèque n'est chargée qu'au premier export.
+   Logo de l'école en tête de chaque feuille, couleurs des matières,
+   pauses mises en valeur, A4 paysage prêt à imprimer.
+   La bibliothèque n'est chargée qu'au premier export.
    ================================================================= */
 let EXCEL_LIB = null;
 function loadExcelLib(){
@@ -1892,15 +1910,37 @@ function loadExcelLib(){
   return EXCEL_LIB;
 }
 
-const XL = { navy:'FF1B2A56', navySoft:'FFEEF2FF', line:'FFC9D0DE', gray:'FFF2F3F6', grayText:'FF8A93A6', ink:'FF1F2433', white:'FFFFFFFF', amber:'FFF59E0B' };
-const XL_BORDER = { top:{style:'thin',color:{argb:XL.line}}, left:{style:'thin',color:{argb:XL.line}}, bottom:{style:'thin',color:{argb:XL.line}}, right:{style:'thin',color:{argb:XL.line}} };
+let XL_LOGO = null;
+async function xlLogo(){
+  if(XL_LOGO) return XL_LOGO;
+  try{
+    const r = await fetch('/brand/logo-excel.png', { cache:'force-cache' });
+    if(!r.ok) return null;
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    let bin = '';
+    for(let i=0; i<bytes.length; i+=0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+0x8000));
+    XL_LOGO = 'data:image/png;base64,' + btoa(bin);
+    return XL_LOGO;
+  }catch(e){ return null; }
+}
+
+const XL_FONT = 'Calibri';
+const XL = {
+  navy:'FF1B2A56', navySoft:'FFEEF2FF', line:'FFD5DBE7', ink:'FF1F2433', grayText:'FF8A93A6', white:'FFFFFFFF',
+  gold:'FFF5B301', zebra:'FFF8FAFC', closed:'FFF1F5F9', closedText:'FF94A3B8', link:'FF1E3A8A',
+  pause:{ fill:'FFFEF3C7', text:'FF92400E', line:'FFFDE68A', head:'FFFCD34D' },
+  lunch:{ fill:'FFFFEDD5', text:'FF9A3412', line:'FFFED7AA', head:'FFFDBA74' }
+};
+const xlSolid = argb => ({ type:'pattern', pattern:'solid', fgColor:{ argb } });
+const xlBorder = argb => ({ top:{style:'thin',color:{argb}}, left:{style:'thin',color:{argb}}, bottom:{style:'thin',color:{argb}}, right:{style:'thin',color:{argb}} });
+const XL_BORDER = xlBorder(XL.line);
 
 function xlArgb(hex){ const v=String(hex||'#888888').replace('#','').toUpperCase(); return 'FF'+(/^[0-9A-F]{6}$/.test(v)?v:'888888'); }
 function xlTextOn(hex){
   const v=String(hex||'').replace('#','');
   if(!/^[0-9a-fA-F]{6}$/.test(v)) return XL.white;
   const L=(0.299*parseInt(v.slice(0,2),16)+0.587*parseInt(v.slice(2,4),16)+0.114*parseInt(v.slice(4,6),16))/255;
-  return L>0.62 ? XL.ink : XL.white;   // texte foncé sur les couleurs claires
+  return L>0.62 ? XL.ink : XL.white;
 }
 function xlSheetName(name, used){
   let n=String(name).replace(/[\\\/\?\*\[\]:]/g,' ').replace(/\s+/g,' ').trim().slice(0,31) || 'Feuille';
@@ -1943,85 +1983,117 @@ function xlCountHours(fn){
   let n=0; DAYS.forEach(d=>PERIODS.forEach((p,pi)=>{ if(p.type==='course' && isOpen(d,pi) && fn(d,pi)) n++; })); return n;
 }
 
-function xlTimetable(wb, sheetName, title, getCell){
+/* En-tête de marque : logo à gauche, titre, établissement, année, filet doré */
+function xlBrandHeader(ws, nCols, title, line3, logoId){
+  ws.getRow(1).height = 27; ws.getRow(2).height = 17; ws.getRow(3).height = 19; ws.getRow(4).height = 9;
+  const put = (r, value, font)=>{
+    ws.mergeCells(r, 2, r, nCols);
+    const c = ws.getCell(r, 2); c.value = value; c.font = font; c.alignment = { vertical:'middle', horizontal:'left' };
+  };
+  put(1, title, { name:XL_FONT, size:18, bold:true, color:{argb:XL.navy} });
+  put(2, 'Académie Georges Claude · Private Academy · El Jadida', { name:XL_FONT, size:10, color:{argb:XL.grayText} });
+  put(3, line3, { name:XL_FONT, size:11, bold:true, color:{argb:XL.navy} });
+  for(let c=1; c<=nCols; c++) ws.getCell(4, c).border = { bottom:{ style:'medium', color:{ argb:XL.gold } } };
+  if(logoId !== null && logoId !== undefined)
+    ws.addImage(logoId, { tl:{ col:0.16, row:0.1 }, ext:{ width:68, height:68 }, editAs:'oneCell' });
+}
+
+function xlTimetable(wb, sheetName, title, getCell, logoId){
   const nCols = 1 + PERIODS.length;
+  const H = 6, first = H + 1, last = H + DAYS.length;   // ligne 5 : respiration sous le filet doré
   const ws = wb.addWorksheet(sheetName, {
     properties:{ tabColor:{ argb:XL.navy } },
-    views:[{ state:'frozen', xSplit:1, ySplit:4, showGridLines:false }],
+    views:[{ state:'frozen', xSplit:1, ySplit:H, showGridLines:false }],
     pageSetup:{ paperSize:9, orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:1, horizontalCentered:true,
-                margins:{ left:0.3, right:0.3, top:0.45, bottom:0.45, header:0.2, footer:0.2 } }
+                margins:{ left:0.3, right:0.3, top:0.4, bottom:0.45, header:0.2, footer:0.2 } }
   });
-  ws.headerFooter.oddFooter = '&L&8Planning AGC — Académie Georges Claude&R&8Année scolaire ' + schoolYearLabel();
-  ws.columns = [{ width:14 }].concat(PERIODS.map(p=>({ width: p.type==='course' ? 21 : 7 })));
+  ws.headerFooter.oddFooter = '&L&8Planning AGC — Académie Georges Claude&C&8Année scolaire '+schoolYearLabel()+'&R&8Page &P / &N';
+  ws.columns = [{ width:14 }].concat(PERIODS.map(p=>({ width: p.type==='course' ? 21 : 9 })));
+  xlBrandHeader(ws, nCols, title, 'Année scolaire ' + schoolYearLabel(), logoId);
+  ws.getRow(5).height = 9;
 
-  ws.mergeCells(1,1,1,nCols);
-  const tc=ws.getCell(1,1); tc.value=title;
-  tc.font={ name:'Calibri', size:16, bold:true, color:{argb:XL.navy} }; tc.alignment={ vertical:'middle' };
-  ws.getRow(1).height=28;
-  ws.mergeCells(2,1,2,nCols);
-  const sc=ws.getCell(2,1); sc.value='Académie Georges Claude · El Jadida · Année scolaire '+schoolYearLabel();
-  sc.font={ name:'Calibri', size:10, color:{argb:XL.grayText} };
-  ws.getRow(2).height=18; ws.getRow(3).height=8;
-
-  const hr=ws.getRow(4); hr.height=32;
-  ['Jour'].concat(PERIODS.map(p=>p.label)).forEach((v,i)=>{
-    const c=hr.getCell(i+1); c.value=v;
-    c.font={ name:'Calibri', size:10, bold:true, color:{argb:XL.white} };
-    c.fill={ type:'pattern', pattern:'solid', fgColor:{argb:XL.navy} };
-    c.alignment={ vertical:'middle', horizontal:'center', wrapText:true }; c.border=XL_BORDER;
+  // en-tête du tableau
+  const hr = ws.getRow(H); hr.height = 38;
+  const h0 = hr.getCell(1); h0.value = 'Jour';
+  h0.font = { name:XL_FONT, size:10, bold:true, color:{argb:XL.white} }; h0.fill = xlSolid(XL.navy);
+  h0.alignment = { vertical:'middle', horizontal:'center' }; h0.border = XL_BORDER;
+  PERIODS.forEach((p, pi)=>{
+    const c = hr.getCell(pi+2);
+    c.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+    if(p.type === 'course'){
+      c.value = p.label;
+      c.font = { name:XL_FONT, size:10, bold:true, color:{argb:XL.white} };
+      c.fill = xlSolid(XL.navy); c.border = XL_BORDER;
+    }else{
+      const k = p.type === 'lunch' ? XL.lunch : XL.pause;
+      c.value = p.label.replace(' – ', '\n');
+      c.font = { name:XL_FONT, size:9, bold:true, color:{argb:k.text} };
+      c.fill = xlSolid(k.head); c.border = xlBorder(k.line);
+    }
   });
 
+  // jours et séances
   DAYS.forEach((day, di)=>{
-    const row=ws.getRow(5+di); row.height=50;
-    const dc=row.getCell(1); dc.value=day;
-    dc.font={ name:'Calibri', size:11, bold:true, color:{argb:XL.navy} };
-    dc.fill={ type:'pattern', pattern:'solid', fgColor:{argb:XL.navySoft} };
-    dc.alignment={ vertical:'middle', horizontal:'center' }; dc.border=XL_BORDER;
+    const row = ws.getRow(first + di); row.height = 60;
+    const dc = row.getCell(1); dc.value = day;
+    dc.font = { name:XL_FONT, size:11, bold:true, color:{argb:XL.navy} };
+    dc.fill = xlSolid(XL.navySoft); dc.alignment = { vertical:'middle', horizontal:'center' }; dc.border = XL_BORDER;
     PERIODS.forEach((p, pi)=>{
-      const c=row.getCell(pi+2); c.border=XL_BORDER;
-      c.alignment={ vertical:'middle', horizontal:'center', wrapText:true };
-      if(p.type!=='course' || !isOpen(day,pi)){ c.fill={ type:'pattern', pattern:'solid', fgColor:{argb:XL.gray} }; return; }
-      const v=getCell(day, pi); if(!v) return;
-      const fg=xlTextOn(v.color);
-      c.fill={ type:'pattern', pattern:'solid', fgColor:{argb:xlArgb(v.color)} };
-      c.value={ richText:[{ text:v.lines[0], font:{ name:'Calibri', size:10, bold:true, color:{argb:fg} } }]
-        .concat(v.lines.slice(1).map(l=>({ text:'\n'+l, font:{ name:'Calibri', size:9, color:{argb:fg} } }))) };
+      if(p.type !== 'course' || !isOpen(day, pi)) return;   // traités à part (cellules fusionnées)
+      const c = row.getCell(pi+2);
+      c.border = XL_BORDER; c.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+      const v = getCell(day, pi);
+      if(!v){ c.fill = xlSolid(XL.white); return; }
+      const fg = xlTextOn(v.color);
+      c.fill = xlSolid(xlArgb(v.color));
+      c.value = { richText:[{ text:v.lines[0], font:{ name:XL_FONT, size:10, bold:true, color:{argb:fg} } }]
+        .concat(v.lines.slice(1).map(l=>({ text:'\n'+l, font:{ name:XL_FONT, size:9, color:{argb:fg} } }))) };
     });
   });
 
-  // colonnes de pause : une seule cellule verticale
+  // pauses : une colonne unique sur toute la semaine
   PERIODS.forEach((p, pi)=>{
-    if(p.type==='course') return;
-    ws.mergeCells(5, pi+2, 4+DAYS.length, pi+2);
-    const c=ws.getCell(5, pi+2); c.value = p.type==='break' ? 'PAUSE' : 'DÉJEUNER';
-    c.font={ name:'Calibri', size:9, bold:true, color:{argb:XL.grayText} };
-    c.alignment={ vertical:'middle', horizontal:'center', textRotation:90 };
-    c.fill={ type:'pattern', pattern:'solid', fgColor:{argb:XL.gray} };
+    if(p.type === 'course') return;
+    const k = p.type === 'lunch' ? XL.lunch : XL.pause;
+    for(let r=first; r<=last; r++){ const c = ws.getCell(r, pi+2); c.fill = xlSolid(k.fill); c.border = xlBorder(k.line); }
+    const c = ws.getCell(first, pi+2);
+    c.value = (p.type === 'lunch' ? 'DÉJEUNER' : 'PAUSE') + '  ·  ' + fmtDuration(periodMinutes(p.label));
+    c.font = { name:XL_FONT, size:10, bold:true, color:{argb:k.text} };
+    c.alignment = { vertical:'middle', horizontal:'center', textRotation:90 };
+    ws.mergeCells(first, pi+2, last, pi+2);
   });
 
-  // créneaux fermés consécutifs (vendredi après-midi) : une seule cellule
+  // créneaux fermés consécutifs (vendredi après-midi) : une seule case
   DAYS.forEach((day, di)=>{
-    let start=null, last=null;
-    const close=()=>{
-      if(start===null) return;
-      const r=5+di; if(last>start) ws.mergeCells(r, start+2, r, last+2);
-      const c=ws.getCell(r, start+2); c.value='Pas de cours';
-      c.font={ name:'Calibri', size:9, italic:true, color:{argb:XL.grayText} };
-      c.alignment={ vertical:'middle', horizontal:'center' };
-      c.fill={ type:'pattern', pattern:'solid', fgColor:{argb:XL.gray} };
-      start=null;
+    const r = first + di;
+    let start = null, stop = null;
+    const close = ()=>{
+      if(start === null) return;
+      for(let pi=start; pi<=stop; pi++){ const c = ws.getCell(r, pi+2); c.fill = xlSolid(XL.closed); c.border = XL_BORDER; }
+      const c = ws.getCell(r, start+2);
+      c.value = stop > start ? 'Pas de cours' : '—';
+      c.font = { name:XL_FONT, size:10, italic:true, color:{argb:XL.closedText} };
+      c.alignment = { vertical:'middle', horizontal:'center' };
+      if(stop > start) ws.mergeCells(r, start+2, r, stop+2);
+      start = null;
     };
     PERIODS.forEach((p, pi)=>{
-      if(p.type==='course' && !isOpen(day,pi)){ if(start===null) start=pi; last=pi; }
+      if(p.type === 'course' && !isOpen(day, pi)){ if(start === null) start = pi; stop = pi; }
       else close();
     });
     close();
   });
 
-  const hours=xlCountHours(getCell);
-  const fr=6+DAYS.length; ws.mergeCells(fr,1,fr,nCols);
-  const fc=ws.getCell(fr,1); fc.value=hours+' heure'+(hours>1?'s':'')+' de cours par semaine';
-  fc.font={ name:'Calibri', size:10, italic:true, color:{argb:XL.grayText} };
+  // pied de tableau
+  const hours = xlCountHours(getCell);
+  const brk = PERIODS.find(p=>p.type==='break'), lun = PERIODS.find(p=>p.type==='lunch');
+  const fr = last + 2;
+  ws.mergeCells(fr, 1, fr, nCols);
+  const fc = ws.getCell(fr, 1);
+  fc.value = hours + ' heure' + (hours>1?'s':'') + ' de cours par semaine'
+    + (brk ? '   ·   Pause ' + brk.label : '') + (lun ? '   ·   Déjeuner ' + lun.label : '')
+    + '   ·   Vendredi : cours le matin uniquement';
+  fc.font = { name:XL_FONT, size:9.5, italic:true, color:{argb:XL.grayText} };
   return hours;
 }
 
@@ -2030,87 +2102,94 @@ async function exportExcel(scope){
   try{ await loadExcelLib(); }
   catch(e){ toast('Module Excel indisponible — vérifiez la connexion puis réessayez'); return; }
 
-  const wb=new ExcelJS.Workbook();
-  wb.creator='Planning AGC'; wb.company='Académie Georges Claude'; wb.created=new Date();
-  const used=new Set();
-  const year=schoolYear();
-  let fileName, count=0;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Planning AGC'; wb.company = 'Académie Georges Claude'; wb.created = new Date();
+  const logoData = await xlLogo();
+  const logoId = logoData ? wb.addImage({ base64:logoData, extension:'png' }) : null;
+  const used = new Set();
+  const year = schoolYear();
+  let fileName, count = 0;
 
-  if(scope==='full'){
-    const idxName=xlSheetName('Sommaire', used);
-    const classes=state.classes.map(c=>({ c, name:xlSheetName(c.name, used) }));
-    const teachers=state.teachers
+  if(scope === 'full'){
+    const idxName = xlSheetName('Sommaire', used);
+    const classes = state.classes.map(c=>({ c, name:xlSheetName(c.name, used), fn:xlCellsClass(c.id) }));
+    const teachers = state.teachers
       .map(t=>({ t, fn:xlCellsEntity(t.id,'teacher') }))
-      .filter(x=>xlCountHours(x.fn)>0)
+      .filter(x=>xlCountHours(x.fn) > 0)
       .map(x=>({ ...x, name:xlSheetName('Prof - '+x.t.name, used) }));
 
-    const idx=wb.addWorksheet(idxName, { properties:{ tabColor:{ argb:XL.amber } }, views:[{ showGridLines:false }],
-      pageSetup:{ paperSize:9, orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:0 } });
-    idx.columns=[{ width:3 },{ width:16 },{ width:36 },{ width:18 },{ width:16 }];
-    idx.mergeCells(1,2,1,5);
-    const t1=idx.getCell(1,2); t1.value='Emplois du temps — Année scolaire '+schoolYearLabel();
-    t1.font={ name:'Calibri', size:16, bold:true, color:{argb:XL.navy} };
-    idx.getRow(1).height=28;
-    idx.mergeCells(2,2,2,5);
-    const t2=idx.getCell(2,2); t2.value='Académie Georges Claude · El Jadida · généré le '+new Date().toLocaleDateString('fr-FR');
-    t2.font={ name:'Calibri', size:10, color:{argb:XL.grayText} };
-    const head=idx.getRow(4); head.height=24;
-    ['Type','Nom','Heures / semaine','Feuille'].forEach((v,i)=>{
-      const c=head.getCell(i+2); c.value=v;
-      c.font={ name:'Calibri', size:10, bold:true, color:{argb:XL.white} };
-      c.fill={ type:'pattern', pattern:'solid', fgColor:{argb:XL.navy} };
-      c.alignment={ vertical:'middle', horizontal: i===1 ? 'left' : 'center' }; c.border=XL_BORDER;
+    const idx = wb.addWorksheet(idxName, {
+      properties:{ tabColor:{ argb:XL.gold } },
+      views:[{ state:'frozen', ySplit:6, showGridLines:false }],
+      pageSetup:{ paperSize:9, orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:0, horizontalCentered:true,
+                  margins:{ left:0.4, right:0.4, top:0.5, bottom:0.5, header:0.2, footer:0.2 } }
     });
-    let r=5;
-    const line=(type, name, hours, sheet)=>{
-      const row=idx.getRow(r++); row.height=20;
-      [type, name, hours].forEach((v,i)=>{
-        const c=row.getCell(i+2); c.value=v; c.border=XL_BORDER;
-        c.font={ name:'Calibri', size:10, color:{argb:XL.ink}, bold:i===1 };
-        c.alignment={ vertical:'middle', horizontal: i===1 ? 'left' : 'center' };
-      });
-      const l=row.getCell(5);
-      l.value={ text:'Ouvrir →', hyperlink:"#'"+sheet.replace(/'/g,"''")+"'!A1" };
-      l.font={ name:'Calibri', size:10, color:{argb:'FF1E3A8A'}, underline:true };
-      l.alignment={ vertical:'middle', horizontal:'center' }; l.border=XL_BORDER;
-    };
+    idx.headerFooter.oddFooter = '&L&8Planning AGC — Académie Georges Claude&R&8Page &P / &N';
+    idx.columns = [{ width:13 }, { width:15 }, { width:38 }, { width:18 }, { width:14 }];
+    xlBrandHeader(idx, 5, 'Emplois du temps', 'Année scolaire ' + schoolYearLabel() + '  ·  généré le ' + new Date().toLocaleDateString('fr-FR'), logoId);
+    idx.getRow(5).height = 10;
 
-    const classRows=classes.map(x=>{ const fn=xlCellsClass(x.c.id); return { x, fn, h:xlCountHours(fn) }; });
-    classRows.forEach(({x,h})=>line('Classe', x.c.name, h, x.name));
+    const head = idx.getRow(6); head.height = 26;
+    ['Type', 'Nom', 'Heures / semaine', 'Feuille'].forEach((v, i)=>{
+      const c = head.getCell(i+2); c.value = v;
+      c.font = { name:XL_FONT, size:10, bold:true, color:{argb:XL.white} };
+      c.fill = xlSolid(XL.navy); c.border = XL_BORDER;
+      c.alignment = { vertical:'middle', horizontal: i===1 ? 'left' : 'center', indent: i===1 ? 1 : 0 };
+    });
+    let r = 7;
+    const line = (type, name, hours, sheet)=>{
+      const row = idx.getRow(r); row.height = 22;
+      const zebra = (r % 2 === 0);
+      const cells = [row.getCell(2), row.getCell(3), row.getCell(4), row.getCell(5)];
+      cells.forEach(c=>{ c.border = XL_BORDER; c.fill = xlSolid(zebra ? XL.zebra : XL.white); c.alignment = { vertical:'middle', horizontal:'center' }; });
+      const isClass = type === 'Classe';
+      cells[0].value = type;
+      cells[0].fill = xlSolid(isClass ? XL.navySoft : XL.pause.fill);
+      cells[0].font = { name:XL_FONT, size:10, bold:true, color:{argb: isClass ? XL.navy : XL.pause.text} };
+      cells[1].value = name;
+      cells[1].font = { name:XL_FONT, size:10.5, bold:true, color:{argb:XL.ink} };
+      cells[1].alignment = { vertical:'middle', horizontal:'left', indent:1 };
+      cells[2].value = hours;
+      cells[2].font = { name:XL_FONT, size:10, color:{argb:XL.ink} };
+      cells[3].value = { text:'Ouvrir  →', hyperlink:"#'" + sheet.replace(/'/g, "''") + "'!A1" };
+      cells[3].font = { name:XL_FONT, size:10, bold:true, color:{argb:XL.link}, underline:true };
+      r++;
+    };
+    classes.forEach(x=>line('Classe', x.c.name, xlCountHours(x.fn), x.name));
     teachers.forEach(x=>line('Enseignant', x.t.name, xlCountHours(x.fn), x.name));
 
-    classRows.forEach(({x,fn})=>{ xlTimetable(wb, x.name, 'Emploi du temps — '+x.c.name, fn); count++; });
-    teachers.forEach(x=>{ xlTimetable(wb, x.name, 'Emploi du temps — '+x.t.name, x.fn); count++; });
-    fileName='Emplois-du-temps-AGC-'+year+'.xlsx';
+    classes.forEach(x=>{ xlTimetable(wb, x.name, 'Emploi du temps — ' + x.c.name, x.fn, logoId); count++; });
+    teachers.forEach(x=>{ xlTimetable(wb, x.name, 'Emploi du temps — ' + x.t.name, x.fn, logoId); count++; });
+    fileName = 'Emplois-du-temps-AGC-' + year + '.xlsx';
   }else{
     let ent, title, fn;
-    if(planMode==='class'){
-      ent=byId(state.classes, state.currentClass);
+    if(planMode === 'class'){
+      ent = byId(state.classes, state.currentClass);
       if(!ent){ toast('Aucune classe sélectionnée'); return; }
-      title='Emploi du temps — '+ent.name; fn=xlCellsClass(ent.id);
-    }else if(planMode==='teacher'){
-      ent=byId(state.teachers, currentEntity);
+      title = 'Emploi du temps — ' + ent.name; fn = xlCellsClass(ent.id);
+    }else if(planMode === 'teacher'){
+      ent = byId(state.teachers, currentEntity);
       if(!ent){ toast('Aucun enseignant sélectionné'); return; }
-      title='Emploi du temps — '+ent.name; fn=xlCellsEntity(ent.id,'teacher');
+      title = 'Emploi du temps — ' + ent.name; fn = xlCellsEntity(ent.id, 'teacher');
     }else{
-      ent=byId(state.subjects, currentEntity);
+      ent = byId(state.subjects, currentEntity);
       if(!ent){ toast('Aucune matière sélectionnée'); return; }
-      title='Matière — '+ent.name; fn=xlCellsEntity(ent.id,'subject');
+      title = 'Matière — ' + ent.name; fn = xlCellsEntity(ent.id, 'subject');
     }
-    xlTimetable(wb, xlSheetName(ent.name, used), title, fn); count=1;
-    fileName='Emploi-du-temps-'+xlFileSafe(ent.name)+'-'+year+'.xlsx';
+    xlTimetable(wb, xlSheetName(ent.name, used), title, fn, logoId); count = 1;
+    fileName = 'Emploi-du-temps-' + xlFileSafe(ent.name) + '-' + year + '.xlsx';
   }
 
   try{
-    const buf=await wb.xlsx.writeBuffer();
-    const blob=new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob); a.download=fileName;
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = fileName;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-    toast(count>1 ? count+' emplois du temps exportés dans Excel' : 'Fichier Excel téléchargé');
+    toast(count > 1 ? count + ' emplois du temps exportés dans Excel' : 'Fichier Excel téléchargé');
   }catch(e){
-    toast('Export impossible : '+(e && e.message ? e.message : 'erreur'));
+    toast('Export impossible : ' + (e && e.message ? e.message : 'erreur'));
   }
 }
 

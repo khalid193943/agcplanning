@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-const ENGINE_VERSION = '4.0.0';
+const ENGINE_VERSION = '5.0.0';
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {

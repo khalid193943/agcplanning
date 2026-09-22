@@ -1,10 +1,32 @@
-# Planning AGC — version 4
+# Planning AGC — version 5
 
 Emplois du temps de l'Académie Georges Claude, El Jadida.
 
 Application **Next.js 16** avec une base de données **PostgreSQL**.
 Toutes les données sont enregistrées en ligne, rien n'est gardé dans le navigateur.
 Un seul accès administrateur : **`adminagc`**.
+
+---
+
+## Nouveautés de la version 5
+
+**Logo officiel de l'école** partout : barre latérale, écran de connexion, écran de
+chargement, en-tête d'impression, icône de l'onglet du navigateur, et en tête de
+**chaque feuille Excel**.
+
+**Pauses redessinées.** Dans l'emploi du temps, chaque pause forme une seule colonne
+claire sur toute la semaine : ambrée avec une tasse pour la pause (15 min), orangée
+avec des couverts pour le déjeuner (30 min). Le vendredi après-midi apparaît en une
+seule case « Pas de cours ».
+
+**Excel retravaillé.** Chaque feuille porte le logo, le nom de l'établissement et
+l'année scolaire, un filet doré aux couleurs de l'école, les pauses en colonnes
+colorées, et tient sur une page A4 paysage. Les fichiers ont été ouverts et vérifiés
+dans un vrai tableur (LibreOffice) : aucune erreur, logo présent sur 20 pages sur 20.
+
+Pour mettre à jour GitHub : envoyez à nouveau tous les fichiers du projet (ils
+remplacent les anciens). Le dossier `public/brand/` est nouveau. Vous pouvez
+supprimer `public/favicon.svg`, qui ne sert plus.
 
 ---
 
@@ -144,13 +166,13 @@ l'accès est bloqué 15 minutes pour cette adresse.
 
 ## Contrôles effectués avant livraison
 
-- 102 vérifications dans un vrai navigateur Chrome, chacune confirmée dans la base
+- 109 vérifications dans un vrai navigateur Chrome, chacune confirmée dans la base
   PostgreSQL : connexion, établissement et année scolaire, matières, enseignants à
   plusieurs matières, classes, génération, glisser-déposer, ajout et retrait de séances,
   vues, impression, exports Excel, rechargement, conflit entre appareils, coupure
   réseau, historique, session expirée, conversion des anciennes données, déconnexion.
 - 38 tests de l'API : sécurité, sessions, verrouillage, historique, limites.
-- Fichiers Excel ouverts et analysés par un lecteur indépendant.
+- Fichiers Excel ouverts sans erreur dans LibreOffice ; logo présent sur chaque feuille.
 - Reconstruction complète à partir de zéro, comme sur Vercel.
 
 ---
@@ -179,6 +201,7 @@ Node.js 20.9 ou plus récent est nécessaire.
 | `lib/db.ts`                  | Accès PostgreSQL, création et réparation automatiques des tables |
 | `lib/session.ts`             | Session signée, vérification du mot de passe |
 | `public/planning/app.js`     | Moteur du planning (génération, glisser-déposer, export Excel) |
+| `public/brand/`              | Logo officiel de l'école (site et Excel) |
 | `public/vendor/`, `public/fonts/` | Icônes, outil Excel et polices, hébergés par le site |
 
 Aucune dépendance à un service externe à l'exécution.

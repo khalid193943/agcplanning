@@ -5,7 +5,7 @@ import './fonts.css';
 export const metadata: Metadata = {
   title: 'Planning AGC — Emplois du temps',
   description: "Emplois du temps de l'Académie Georges Claude, El Jadida",
-  icons: { icon: '/favicon.svg' },
+  icons: { icon: '/favicon.png', apple: '/apple-touch-icon.png' },
   robots: { index: false, follow: false }, // outil interne : pas de référencement
 };
 

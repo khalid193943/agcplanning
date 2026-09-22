@@ -1,6 +1,6 @@
 {
   "name": "planning-agc",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
   "description": "Planning AGC — emplois du temps de l'Académie Georges Claude (El Jadida)",
   "scripts": {
